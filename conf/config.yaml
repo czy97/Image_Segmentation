@@ -3,21 +3,22 @@ exp_dir: 'exp/test'
 
 # model configuration
 model_type: 'U_Net'  # from U_Net, R2U_Net, AttU_Net, R2AttU_Net
-base_ch_num: 64
+base_ch_num: 8
 
 # data config
 root: 'data'
 aug_prob: 0.8
 crop_size_min: 300
 crop_size_max: 500
-data_num: 100
+data_num: 6400
 shuffle: True
-batch_size: 2
-num_workers: 2
+batch_size: 32
+num_workers: 4
 
 # optimization config
 seed: 666
 lr: 0.0001
-num_epochs: 100
-save_per_epoch: 5
+num_epochs: 20
+save_per_epoch: 1
+weight_decay: 0.0001
 

@@ -155,7 +155,8 @@ def main(config, gpu_id, **kwargs):
 
     model = eval(conf['model_type'])(base_ch_num=conf['base_ch_num'])
     model = model.to(conf['device'])
-    optimizer = optim.Adam(model.parameters(), lr=conf['lr'], betas=(0.5, 0.999))
+    optimizer = optim.Adam(model.parameters(), lr=conf['lr'], betas=(0.5, 0.999),
+                        weight_decay=conf['weight_decay'])
 
     num_params = sum(param.numel() for param in model.parameters())
     logger.info("Model type: {} Base channel num:{}".format(conf['model_type'], conf['base_ch_num']))
