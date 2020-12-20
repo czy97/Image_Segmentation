@@ -53,7 +53,7 @@ def test(model, test_loader, conf, logger, epoch):
             DC += get_DC(seg_prob, labels)
             length += images.size(0)
 
-            if epoch % conf['save_per_epoch'] == 0:
+            if epoch % conf['save_per_epoch'] == 0 and conf['rank'] == 0:
                 torchvision.utils.save_image(images.data.cpu(), store_path.format(epoch, 'image'))
                 torchvision.utils.save_image(labels.data.cpu(), store_path.format(epoch, 'GT'))
                 torchvision.utils.save_image(seg_prob.data.cpu(), store_path.format(epoch, 'SR'))
@@ -69,10 +69,11 @@ def test(model, test_loader, conf, logger, epoch):
     DC = DC / length
     unet_score = JS + DC
 
-    logger.info("[Test] Rank:{} Epoch: [{}/{}] Acc: {:.3f} SE: {:.3f}  SP: {:.3f} PC: {:.3f} F1: {:.3f} JS: {:.3f} "
-                "DC: {:.3f} Unet_score: {:.3f}".format(conf['rank'], epoch, conf['num_epochs'],
-                                                       acc, SE, SP, PC, F1, JS, DC,
-                                                       unet_score))
+    if conf['rank'] == 0:
+        logger.info("[Test] Epoch: [{}/{}] Acc: {:.3f} SE: {:.3f}  SP: {:.3f} PC: {:.3f} F1: {:.3f} JS: {:.3f} "
+                    "DC: {:.3f} Unet_score: {:.3f}".format(epoch, conf['num_epochs'],
+                                                           acc, SE, SP, PC, F1, JS, DC,
+                                                           unet_score))
 
     return acc, unet_score
 
