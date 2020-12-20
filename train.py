@@ -1,6 +1,7 @@
 import fire
 import os
 from tqdm import tqdm
+import torch
 from torch import optim
 import torchvision
 from torch.utils.data import DataLoader
@@ -38,7 +39,7 @@ def test(model, test_loader, conf, logger, epoch):
             images = images.to(conf['device'])
             labels = labels.to(conf['device'])
             seg_res = model(images)
-            seg_prob = F.sigmoid(seg_res)
+            seg_prob = torch.sigmoid(seg_res)
 
             acc += get_accuracy(seg_prob, labels)
             SE += get_sensitivity(seg_prob, labels)
@@ -49,10 +50,11 @@ def test(model, test_loader, conf, logger, epoch):
             DC += get_DC(seg_prob, labels)
             length += images.size(0)
 
-            torchvision.utils.save_image(images.data.cpu(), store_path.format(epoch, 'image'))
-            torchvision.utils.save_image(labels.data.cpu(), store_path.format(epoch, 'GT'))
-            torchvision.utils.save_image(seg_prob.data.cpu(), store_path.format(epoch, 'SR'))
-            torchvision.utils.save_image((seg_prob > 0.5).float().data.cpu(), store_path.format(epoch, 'PRE'))
+            if epoch % conf['save_per_epoch'] == 0:
+                torchvision.utils.save_image(images.data.cpu(), store_path.format(epoch, 'image'))
+                torchvision.utils.save_image(labels.data.cpu(), store_path.format(epoch, 'GT'))
+                torchvision.utils.save_image(seg_prob.data.cpu(), store_path.format(epoch, 'SR'))
+                torchvision.utils.save_image((seg_prob > 0.5).float().data.cpu(), store_path.format(epoch, 'PRE'))
 
 
     acc = acc / length
@@ -95,7 +97,7 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
 
             optimizer.zero_grad()
             seg_res = model(images)
-            seg_prob = F.sigmoid(seg_res)
+            seg_prob = torch.sigmoid(seg_res)
 
             seg_res_flat = seg_res.view(seg_res.size(0), -1)
             labels_flat = labels.view(labels.size(0), -1)
@@ -131,7 +133,7 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
         test_acc, unet_score = test(model, test_loader, conf, logger, epoch)
 
 
-def main(config, gpu_id, kwargs):
+def main(config, gpu_id, **kwargs):
     conf = parse_config_or_kwargs(config, **kwargs)
 
     check_dir(conf['exp_dir'])

@@ -17,14 +17,12 @@ class ImageFolder(data.Dataset):
         self.crop_size_max = crop_size_max
         self.data_num = data_num
 
-        data_dir_name = mode + '_img'
-        label_dir_name = mode + '_label'
+        self.data_dir_name = mode + '_img'
+        self.label_dir_name = mode + '_label'
 
-        self.data_list = []
-        data_paths = glob.glob(os.path.join(root, 'new_{}_set'.format(mode), data_dir_name, '*.png'))
-        for data_path in data_paths:
-            label_path = data_path.replace(data_dir_name, label_dir_name)
-            self.data_list.append((Image.open(data_path), Image.open(label_path)))
+        
+        self.data_paths = glob.glob(os.path.join(root, 'new_{}_set'.format(mode), self.data_dir_name, '*.png'))
+        self.data_paths.sort()
 
         self.mode = mode
         self.RotationDegree = [0, 90, 180, 270]
@@ -32,7 +30,9 @@ class ImageFolder(data.Dataset):
 
     def __getitem__(self, index):
         """Reads an image from a file and preprocesses it and returns."""
-        image, GT = self.data_list[index % len(self.data_list)]
+        data_path = self.data_paths[index % len(self.data_paths)]
+        image = Image.open(data_path)
+        GT = Image.open(data_path.replace(self.data_dir_name, self.label_dir_name))
 
         Transform = []
         p_transform = random.random()
@@ -70,8 +70,8 @@ class ImageFolder(data.Dataset):
         Transform = T.Compose(Transform)
 
         image = Transform(image)
-        GT = Transform(GT).int()
-
+        GT = Transform(GT)
+    
         Norm_ = T.Normalize((0.5,), (0.5,))
         image = Norm_(image)
 
@@ -82,7 +82,7 @@ class ImageFolder(data.Dataset):
         if self.data_num > 0:
             return self.data_num
         else:
-            return len(self.data_list)
+            return len(self.data_paths)
 
 
 def get_loader(image_path, image_size, batch_size, num_workers=2, mode='train', augmentation_prob=0.4):

@@ -1,21 +1,22 @@
 # experiment configuration
 exp_dir: 'exp/test'
 
-
-
 # model configuration
 model_type: 'U_Net'
 
 # data config
 root: 'data'
-aug_prob: 0.4
+aug_prob: 0.8
 crop_size_min: 300
 crop_size_max: 500
-data_num: 0
+data_num: 100
 shuffle: True
-batch_size: 8
+batch_size: 2
 num_workers: 2
 
 # optimization config
 seed: 666
 lr: 0.0001
+num_epochs: 100
+save_per_epoch: 5
+
