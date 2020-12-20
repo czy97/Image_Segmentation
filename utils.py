@@ -4,6 +4,16 @@ import torch
 import numpy as np
 import random
 import yaml
+import torch.distributed as dist
+
+
+def dist_init(host_addr, rank, local_rank, world_size, port=23456):
+    host_addr_full = 'tcp://' + host_addr + ':' + str(port)
+    dist.init_process_group("nccl", init_method=host_addr_full,
+                                         rank=rank, world_size=world_size)
+    num_gpus = torch.cuda.device_count()
+    # torch.cuda.set_device(local_rank)
+    assert dist.is_initialized()
 
 
 # ------------------------------ Logger ------------------------------
