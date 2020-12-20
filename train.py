@@ -10,7 +10,7 @@ from utils import parse_config_or_kwargs, store_yaml
 
 from utils import check_dir, get_logger_2
 from utils import set_seed
-from new_dataset import ImageFolder
+from dataset import ImageFolder
 from network import U_Net, R2U_Net, AttU_Net, R2AttU_Net
 from evaluation import *
 

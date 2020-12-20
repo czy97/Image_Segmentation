@@ -1,111 +1,112 @@
 import os
-import argparse
 import random
-import shutil
-from shutil import copyfile
-from misc import printProgressBar
+import numpy as np
+from torch.utils import data
+from torchvision import transforms as T
+from torchvision.transforms import functional as F
+from PIL import Image
+import glob
 
 
-def rm_mkdir(dir_path):
-    if os.path.exists(dir_path):
-        shutil.rmtree(dir_path)
-        print('Remove path - %s'%dir_path)
-    os.makedirs(dir_path)
-    print('Create path - %s'%dir_path)
+class ImageFolder(data.Dataset):
+    def __init__(self, root, mode='train', augmentation_prob=0.4, crop_size_min=300,
+                 crop_size_max=500, data_num=0):
+        """Initializes image paths and preprocessing module."""
+        self.root = root
+        self.crop_size_min = crop_size_min
+        self.crop_size_max = crop_size_max
+        self.data_num = data_num
 
-def main(config):
+        self.data_dir_name = mode + '_img'
+        self.label_dir_name = mode + '_label'
 
-    rm_mkdir(config.train_path)
-    rm_mkdir(config.train_GT_path)
-    rm_mkdir(config.valid_path)
-    rm_mkdir(config.valid_GT_path)
-    rm_mkdir(config.test_path)
-    rm_mkdir(config.test_GT_path)
-
-    filenames = os.listdir(config.origin_data_path)
-    data_list = []
-    GT_list = []
-
-    for filename in filenames:
-        ext = os.path.splitext(filename)[-1]
-        if ext =='.jpg':
-            filename = filename.split('_')[-1][:-len('.jpg')]
-            data_list.append('ISIC_'+filename+'.jpg')
-            GT_list.append('ISIC_'+filename+'_segmentation.png')
-
-    num_total = len(data_list)
-    num_train = int((config.train_ratio/(config.train_ratio+config.valid_ratio+config.test_ratio))*num_total)
-    num_valid = int((config.valid_ratio/(config.train_ratio+config.valid_ratio+config.test_ratio))*num_total)
-    num_test = num_total - num_train - num_valid
-
-    print('\nNum of train set : ',num_train)
-    print('\nNum of valid set : ',num_valid)
-    print('\nNum of test set : ',num_test)
-
-    Arange = list(range(num_total))
-    random.shuffle(Arange)
-
-    for i in range(num_train):
-        idx = Arange.pop()
         
-        src = os.path.join(config.origin_data_path, data_list[idx])
-        dst = os.path.join(config.train_path,data_list[idx])
-        copyfile(src, dst)
-        
-        src = os.path.join(config.origin_GT_path, GT_list[idx])
-        dst = os.path.join(config.train_GT_path, GT_list[idx])
-        copyfile(src, dst)
+        self.data_paths = glob.glob(os.path.join(root, 'new_{}_set'.format(mode), self.data_dir_name, '*.png'))
+        self.data_paths.sort()
 
-        printProgressBar(i + 1, num_train, prefix = 'Producing train set:', suffix = 'Complete', length = 50)
-        
+        self.mode = mode
+        self.RotationDegree = [0, 90, 180, 270]
+        self.augmentation_prob = augmentation_prob
 
-    for i in range(num_valid):
-        idx = Arange.pop()
+    def __getitem__(self, index):
+        """Reads an image from a file and preprocesses it and returns."""
+        data_path = self.data_paths[index % len(self.data_paths)]
+        image = Image.open(data_path)
+        GT = Image.open(data_path.replace(self.data_dir_name, self.label_dir_name))
 
-        src = os.path.join(config.origin_data_path, data_list[idx])
-        dst = os.path.join(config.valid_path,data_list[idx])
-        copyfile(src, dst)
-        
-        src = os.path.join(config.origin_GT_path, GT_list[idx])
-        dst = os.path.join(config.valid_GT_path, GT_list[idx])
-        copyfile(src, dst)
+        Transform = []
+        p_transform = random.random()
 
-        printProgressBar(i + 1, num_valid, prefix = 'Producing valid set:', suffix = 'Complete', length = 50)
+        if (self.mode == 'train') and p_transform <= self.augmentation_prob:
+            RotationDegree = random.randint(0, 3)
+            RotationDegree = self.RotationDegree[RotationDegree]
 
-    for i in range(num_test):
-        idx = Arange.pop()
+            Transform.append(T.RandomRotation((RotationDegree, RotationDegree)))
 
-        src = os.path.join(config.origin_data_path, data_list[idx])
-        dst = os.path.join(config.test_path,data_list[idx])
-        copyfile(src, dst)
-        
-        src = os.path.join(config.origin_GT_path, GT_list[idx])
-        dst = os.path.join(config.test_GT_path, GT_list[idx])
-        copyfile(src, dst)
+            RotationRange = random.randint(-10, 10)
+            Transform.append(T.RandomRotation((RotationRange, RotationRange)))
+
+            Transform = T.Compose(Transform)
+            image = Transform(image)
+            GT = Transform(GT)
+
+            crop_len = random.randint(self.crop_size_min, self.crop_size_max)
+            i, j, h, w = T.RandomCrop.get_params(image, output_size=(crop_len, crop_len))
+            image = F.crop(image, i, j, h, w)
+            GT = F.crop(GT, i, j, h, w)
+
+            if random.random() < 0.5:
+                image = F.hflip(image)
+                GT = F.hflip(GT)
+
+            if random.random() < 0.5:
+                image = F.vflip(image)
+                GT = F.vflip(GT)
+
+            Transform = []
+
+        Transform.append(T.Resize((512, 512)))
+        Transform.append(T.ToTensor())
+        Transform = T.Compose(Transform)
+
+        image = Transform(image)
+        GT = Transform(GT)
+    
+        Norm_ = T.Normalize((0.5,), (0.5,))
+        image = Norm_(image)
+
+        return image, GT
+
+    def __len__(self):
+        """Returns the total number of font files."""
+        if self.data_num > 0:
+            return self.data_num
+        else:
+            return len(self.data_paths)
 
 
-        printProgressBar(i + 1, num_test, prefix = 'Producing test set:', suffix = 'Complete', length = 50)
+def get_loader(image_path, image_size, batch_size, num_workers=2, mode='train', augmentation_prob=0.4):
+    """Builds and returns Dataloader."""
+
+    dataset = ImageFolder(root=image_path, mode=mode, augmentation_prob=augmentation_prob)
+    data_loader = data.DataLoader(dataset=dataset,
+                                  batch_size=batch_size,
+                                  shuffle=True,
+                                  num_workers=num_workers)
+    return data_loader
+
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    root = '/Users/chenzhengyang/gitRepo/Image_Segmentation/data'
+    dataset = ImageFolder(root, mode='test', augmentation_prob=0.4)
 
-    
-    # model hyper-parameters
-    parser.add_argument('--train_ratio', type=float, default=0.6)
-    parser.add_argument('--valid_ratio', type=float, default=0.2)
-    parser.add_argument('--test_ratio', type=float, default=0.2)
+    data_loader = data.DataLoader(dataset=dataset,
+                                  batch_size=5,
+                                  shuffle=False,
+                                  num_workers=1)
 
-    # data path
-    parser.add_argument('--origin_data_path', type=str, default='../ISIC/dataset/ISIC2018_Task1-2_Training_Input')
-    parser.add_argument('--origin_GT_path', type=str, default='../ISIC/dataset/ISIC2018_Task1_Training_GroundTruth')
-    
-    parser.add_argument('--train_path', type=str, default='./dataset/train/')
-    parser.add_argument('--train_GT_path', type=str, default='./dataset/train_GT/')
-    parser.add_argument('--valid_path', type=str, default='./dataset/valid/')
-    parser.add_argument('--valid_GT_path', type=str, default='./dataset/valid_GT/')
-    parser.add_argument('--test_path', type=str, default='./dataset/test/')
-    parser.add_argument('--test_GT_path', type=str, default='./dataset/test_GT/')
-
-    config = parser.parse_args()
-    print(config)
-    main(config)
+    import torchvision
+    for data, label in data_loader:
+        print(label.shape)
+        torchvision.utils.save_image(label.float()*0.7, 'tmp/tmp.png')
+        break
