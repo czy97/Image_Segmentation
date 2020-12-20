@@ -1,0 +1,11 @@
+test.py
+.vscode/
+conf/config_local.yaml
+tmp/
+exp/
+score/
+.DS_Store
+utils/__pycache__/
+models/__pycache__/
+__pycache__/
+.idea/
