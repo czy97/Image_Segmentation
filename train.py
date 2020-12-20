@@ -153,11 +153,13 @@ def main(config, gpu_id, **kwargs):
 
     # -------------------------- get loss_calculator and model --------------------------
 
-    model = eval(conf['model_type'])()
+    model = eval(conf['model_type'])(base_ch_num=conf['base_ch_num'])
     model = model.to(conf['device'])
     optimizer = optim.Adam(model.parameters(), lr=conf['lr'], betas=(0.5, 0.999))
 
-    logger.info("Model type: {}".format(conf['model_type']))
+    num_params = sum(param.numel() for param in model.parameters())
+    logger.info("Model type: {} Base channel num:{}".format(conf['model_type'], conf['base_ch_num']))
+    logger.info("Number of parameters: {:.4f}M".format(1.0 * num_params / 1e6))
     logger.info(optimizer)
 
     train_set = ImageFolder(root=conf['root'], mode='train', augmentation_prob=conf['aug_prob'],
