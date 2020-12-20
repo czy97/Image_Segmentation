@@ -151,7 +151,7 @@ def main(config, rank, process_num, gpu_id, port, kwargs):
 
     host_addr = 'localhost'
     conf['rank'] = rank
-    conf['local_rank'] = rank  # specify the local gpu id
+    conf['local_rank'] = gpu_id  # specify the local gpu id
     conf['world_size'] = process_num
     dist_init(host_addr, conf['rank'], conf['local_rank'], conf['world_size'], port)
 
@@ -166,7 +166,7 @@ def main(config, rank, process_num, gpu_id, port, kwargs):
                               , "[ %(asctime)s ] %(message)s")
 
     logger.info("Rank: {}/{}, local rank:{} is running".format(conf['rank'], conf['world_size'],
-                                                               conf['local_rank']))
+                                                               conf['rank']))
 
     # write the config file to the exp_dir
     if conf['rank'] == 0:
