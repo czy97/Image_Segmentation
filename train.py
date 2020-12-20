@@ -144,7 +144,7 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
         test_acc, unet_score = test(model, test_loader, conf, logger, epoch)
 
 
-def main(config, rank, process_num, gpu_id, port, kwargs):
+def main(config, rank, world_size, gpu_id, port, kwargs):
     torch.backends.cudnn.benchmark = True
 
     conf = parse_config_or_kwargs(config, **kwargs)
@@ -152,7 +152,7 @@ def main(config, rank, process_num, gpu_id, port, kwargs):
     host_addr = 'localhost'
     conf['rank'] = rank
     conf['local_rank'] = gpu_id  # specify the local gpu id
-    conf['world_size'] = process_num
+    conf['world_size'] = world_size
     dist_init(host_addr, conf['rank'], conf['local_rank'], conf['world_size'], port)
 
     # setup logger
@@ -208,14 +208,14 @@ def main(config, rank, process_num, gpu_id, port, kwargs):
     train(model, train_loader, test_loader, optimizer, conf, logger)
 
 
-def spawn_process(config, process_num=1, gpu_id=None, port=23456, **kwargs):
+def spawn_process(config, gpu_id=None, port=23456, **kwargs):
     processes = []
 
     if gpu_id is None:
         gpu_id = [0]
     try:
-        for rank in range(process_num):
-            p = Process(target=main, args=(config, rank, process_num, gpu_id[rank], port, kwargs))
+        for rank, gpu_id_val in enumerate(gpu_id):
+            p = Process(target=main, args=(config, rank, len(gpu_id), gpu_id_val, port, kwargs))
             p.start()
             processes.append(p)
 
