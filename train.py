@@ -33,9 +33,15 @@ def test(model, test_loader, conf, logger, epoch):
     DC = 0.  # Dice Coefficient
     length = 0
 
+    # here we store the 5 test images in the same big image
     result_store_dir = os.path.join(conf['exp_dir'], 'result')
     check_dir(result_store_dir)
-    store_path = os.path.join(result_store_dir, 'epoch-{}-{}.png')
+    store_path_fmt = os.path.join(result_store_dir, 'epoch-{}-{}.png')
+
+    # here we store each predicted image in a .png
+    result_single_image_dir = os.path.join(conf['exp_dir'], 'result_single', 'epoch-{}'.format(epoch))
+    check_dir(result_single_image_dir)
+
 
     with torch.no_grad():
         for iter_idx, (images, labels) in enumerate(test_loader):
@@ -54,10 +60,14 @@ def test(model, test_loader, conf, logger, epoch):
             length += images.size(0)
 
             if epoch % conf['save_per_epoch'] == 0 and conf['rank'] == 0:
-                torchvision.utils.save_image(images.data.cpu(), store_path.format(epoch, 'image'))
-                torchvision.utils.save_image(labels.data.cpu(), store_path.format(epoch, 'GT'))
-                torchvision.utils.save_image(seg_prob.data.cpu(), store_path.format(epoch, 'SR'))
-                torchvision.utils.save_image((seg_prob > 0.5).float().data.cpu(), store_path.format(epoch, 'PRE'))
+                torchvision.utils.save_image(images.data.cpu() + 0.5, store_path_fmt.format(epoch, 'image'))
+                torchvision.utils.save_image(labels.data.cpu(), store_path_fmt.format(epoch, 'GT'))
+                torchvision.utils.save_image(seg_prob.data.cpu(), store_path_fmt.format(epoch, 'SR'))
+                torchvision.utils.save_image((seg_prob > 0.5).float().data.cpu(), store_path_fmt.format(epoch, 'PRE'))
+
+                for i in range(seg_prob.shape[0]):
+                    store_path = os.path.join(result_single_image_dir, '{}.png'.format(i))
+                    torchvision.utils.save_image((seg_prob > 0.5).float().data.cpu(), store_path)
 
 
     acc = acc / length

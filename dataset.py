@@ -38,22 +38,24 @@ class ImageFolder(data.Dataset):
         p_transform = random.random()
 
         if (self.mode == 'train') and p_transform <= self.augmentation_prob:
-            RotationDegree = random.randint(0, 3)
-            RotationDegree = self.RotationDegree[RotationDegree]
+            if random.random() < 0.5:  # random rotation
+                RotationDegree = random.randint(0, 3)
+                RotationDegree = self.RotationDegree[RotationDegree]
 
-            Transform.append(T.RandomRotation((RotationDegree, RotationDegree)))
+                Transform.append(T.RandomRotation((RotationDegree, RotationDegree)))
 
-            RotationRange = random.randint(-10, 10)
-            Transform.append(T.RandomRotation((RotationRange, RotationRange)))
+                RotationRange = random.randint(-10, 10)
+                Transform.append(T.RandomRotation((RotationRange, RotationRange)))
 
-            Transform = T.Compose(Transform)
-            image = Transform(image)
-            GT = Transform(GT)
+                Transform = T.Compose(Transform)
+                image = Transform(image)
+                GT = Transform(GT)
 
-            crop_len = random.randint(self.crop_size_min, self.crop_size_max)
-            i, j, h, w = T.RandomCrop.get_params(image, output_size=(crop_len, crop_len))
-            image = F.crop(image, i, j, h, w)
-            GT = F.crop(GT, i, j, h, w)
+            if random.random() < 0.5:  # random crop
+                crop_len = random.randint(self.crop_size_min, self.crop_size_max)
+                i, j, h, w = T.RandomCrop.get_params(image, output_size=(crop_len, crop_len))
+                image = F.crop(image, i, j, h, w)
+                GT = F.crop(GT, i, j, h, w)
 
             if random.random() < 0.5:
                 image = F.hflip(image)
@@ -98,7 +100,7 @@ def get_loader(image_path, image_size, batch_size, num_workers=2, mode='train', 
 
 if __name__ == '__main__':
     root = '/Users/chenzhengyang/gitRepo/Image_Segmentation/data'
-    dataset = ImageFolder(root, mode='test', augmentation_prob=0.4)
+    dataset = ImageFolder(root, mode='train', augmentation_prob=0.4)
 
     data_loader = data.DataLoader(dataset=dataset,
                                   batch_size=5,
@@ -108,5 +110,5 @@ if __name__ == '__main__':
     import torchvision
     for data, label in data_loader:
         print(label.shape)
-        torchvision.utils.save_image(label.float()*0.7, 'tmp/tmp.png')
-        break
+        # torchvision.utils.save_image(label.float()[0], 'tmp/tmp.png')
+        # break
