@@ -71,6 +71,8 @@ def test(model, test_loader, conf, logger, epoch):
                 for i in range(seg_prob.shape[0]):
                     store_path = os.path.join(result_single_image_dir, '{}.png'.format(i))
                     torchvision.utils.save_image((seg_prob > 0.5).float()[i].data.cpu(), store_path)
+                    store_path = os.path.join(result_single_image_dir, '{}-prob.png'.format(i))
+                    torchvision.utils.save_image(seg_prob[i].data.cpu(), store_path)
 
 
     acc = acc / length
