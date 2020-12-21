@@ -187,7 +187,7 @@ def main(config, rank, world_size, gpu_id, port, kwargs):
     model = eval(conf['model_type'])(base_ch_num=conf['base_ch_num'])
     model = model.to(conf['device'])
     model = DDP(model, device_ids=[conf['local_rank']], output_device=conf['local_rank'])
-    optimizer = optim.Adam(model.parameters(), lr=conf['lr'], betas=(0.5, 0.999))
+    optimizer = optim.Adam(model.parameters(), lr=conf['lr'], betas=(0.5, 0.99))
 
     if conf['rank'] == 0:
         num_params = sum(param.numel() for param in model.parameters())
