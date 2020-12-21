@@ -35,12 +35,15 @@ def test(model, test_loader, conf, logger, epoch):
 
     # here we store the 5 test images in the same big image
     result_store_dir = os.path.join(conf['exp_dir'], 'result')
-    check_dir(result_store_dir)
+    if conf['rank'] == 0:
+        check_dir(result_store_dir)
     store_path_fmt = os.path.join(result_store_dir, 'epoch-{}-{}.png')
 
     # here we store each predicted image in a .png
     result_single_image_dir = os.path.join(conf['exp_dir'], 'result_single', 'epoch-{}'.format(epoch))
-    check_dir(result_single_image_dir)
+    if conf['rank'] == 0:
+        check_dir(result_single_image_dir)
+    dist.barrier()
 
 
     with torch.no_grad():
@@ -67,7 +70,7 @@ def test(model, test_loader, conf, logger, epoch):
 
                 for i in range(seg_prob.shape[0]):
                     store_path = os.path.join(result_single_image_dir, '{}.png'.format(i))
-                    torchvision.utils.save_image((seg_prob > 0.5).float().data.cpu(), store_path)
+                    torchvision.utils.save_image((seg_prob > 0.5).float()[i].data.cpu(), store_path)
 
 
     acc = acc / length
@@ -79,16 +82,23 @@ def test(model, test_loader, conf, logger, epoch):
     DC = DC / length
     unet_score = JS + DC
 
+    # if conf['rank'] == 0:
+    #     logger.info("[Test] Epoch: [{}/{}] Acc: {:.3f} SE: {:.3f}  SP: {:.3f} PC: {:.3f} F1: {:.3f} JS: {:.3f} "
+    #                 "DC: {:.3f} Unet_score: {:.3f}".format(epoch, conf['num_epochs'],
+    #                                                        acc, SE, SP, PC, F1, JS, DC,
+    #                                                        unet_score))
     if conf['rank'] == 0:
-        logger.info("[Test] Epoch: [{}/{}] Acc: {:.3f} SE: {:.3f}  SP: {:.3f} PC: {:.3f} F1: {:.3f} JS: {:.3f} "
-                    "DC: {:.3f} Unet_score: {:.3f}".format(epoch, conf['num_epochs'],
-                                                           acc, SE, SP, PC, F1, JS, DC,
-                                                           unet_score))
+        logger.info("[Test] Rank: {} Epoch: [{}/{}] Acc: {:.3f}".format(conf['rank'],
+                                                            epoch, conf['num_epochs'],
+                                                            acc))
 
     return acc, unet_score
 
 
 def train(model, train_loader, test_loader, optimizer, conf, logger):
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=conf['num_epochs'] * len(train_loader),
+                                                eta_min=1e-6)
+
     model.train()
     best_unet_score = 0.
 
@@ -125,6 +135,7 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
             epoch_loss += loss.item()
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
             acc += get_accuracy(seg_prob, labels)
             SE += get_sensitivity(seg_prob, labels)
@@ -146,11 +157,15 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
         JS = JS / length
         DC = DC / length
         epoch_loss /= len(train_loader)
+        current_lr = optimizer.param_groups[0]['lr']
 
-        logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} SE: {:.3f}  SP: {:.3f} PC: {:.3f} F1: {:.3f} "
-                    "JS: {:.3f} DC: {:.3f} Loss: {:.3f}".format(conf['rank'], epoch, conf['num_epochs'],
-                                                                acc, SE, SP, PC, F1, JS, DC,
-                                                                epoch_loss))
+        # logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} SE: {:.3f}  SP: {:.3f} PC: {:.3f} F1: {:.3f} "
+        #             "JS: {:.3f} DC: {:.3f} Loss: {:.3f}".format(conf['rank'], epoch, conf['num_epochs'],
+        #                                                         acc, SE, SP, PC, F1, JS, DC,
+        #                                                         epoch_loss))
+        logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} Loss: {:.3f} Lr:{:.3e}".format(conf['rank'],
+                                                        epoch, conf['num_epochs'],
+                                                        acc, epoch_loss, current_lr))
 
         test_acc, unet_score = test(model, test_loader, conf, logger, epoch)
 

@@ -90,7 +90,7 @@ def store_yaml(config_file, store_path, **kwargs):
 
 def check_dir(dir):
     if not os.path.exists(dir):
-        os.mkdir(dir)
+        os.makedirs(dir, exist_ok=True)
 
 def set_seed(seed=66):
     np.random.seed(seed)

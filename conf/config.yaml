@@ -17,7 +17,7 @@ num_workers: 4
 
 # optimization config
 seed: 666
-lr: 0.0001
+lr: 0.01
 num_epochs: 20
 save_per_epoch: 1
 weight_decay: 0.0001
