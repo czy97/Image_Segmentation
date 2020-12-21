@@ -171,6 +171,11 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
 
         test_acc, unet_score = test(model, test_loader, conf, logger, epoch)
 
+        if epoch % conf['save_per_epoch'] == 0 and conf['rank'] == 0:
+            save_name = 'Epoch-{}'.format(epoch)
+            state_dict = {'model': model.module.state_dict()}
+            save_checkpoint(state_dict, conf['checkpoint_format'].format(save_name))
+
 
 def main(config, rank, world_size, gpu_id, port, kwargs):
     torch.backends.cudnn.benchmark = True
