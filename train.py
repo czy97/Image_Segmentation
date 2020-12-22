@@ -115,7 +115,7 @@ def test(model, test_loader, conf, logger, epoch):
     #                                                         epoch, conf['num_epochs'],
     #                                                         acc))
     if conf['rank'] == 0:
-        logger.info("[Test] Rank: {} Epoch: [{}/{}] Acc: {:.3f} R_error: {:.2f} R_pre: {:.2f} R_recall: {:.2f}"
+        logger.info("[Test] Rank: {} Epoch: [{}/{}] Acc: {:.3f} R_error: {:.3f} R_pre: {:.3f} R_recall: {:.3f}"
                     " F_split: {:.2f} F_merge: {:.2f}".format(conf['rank'], epoch, conf['num_epochs'],
                                                               acc, random_error_avg, random_precision_avg,
                                                               random_recall_avg, false_split_avg, false_merge_avg
@@ -195,7 +195,7 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
         #                                                 acc, epoch_loss, current_lr))
 
         logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} Loss: {:.3f} Lr:{:.3e} "
-                    "R_error: {:.2f} R_pre: {:.2f} R_recall: {:.2f}"
+                    "R_error: {:.3f} R_pre: {:.3f} R_recall: {:.3f}"
                     " F_split: {:.2f} F_merge: {:.2f}".format(conf['rank'], epoch, conf['num_epochs'],
                                                               acc, epoch_loss, current_lr,
                                                               random_error_avg, random_precision_avg,
