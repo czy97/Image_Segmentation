@@ -52,7 +52,7 @@ def get_metric_val(label_tensor, predict_tensor, thres=0.5):
     return random_error_error, random_error_precision, random_error_recall, false_split, false_merge
 
 
-def test(model, test_loader, conf, logger, epoch):
+def test(model, test_loader, conf, logger, epoch, best_random_error):
     model.eval()
     acc = 0.  # Accuracy
     random_error_avg = 0.0
@@ -70,8 +70,6 @@ def test(model, test_loader, conf, logger, epoch):
 
     # here we store each predicted image in a .png
     result_single_image_dir = os.path.join(conf['exp_dir'], 'result_single', 'epoch-{}'.format(epoch))
-    if conf['rank'] == 0:
-        check_dir(result_single_image_dir)
     dist.barrier()
 
     with torch.no_grad():
@@ -91,11 +89,13 @@ def test(model, test_loader, conf, logger, epoch):
             length += images.size(0)
 
             if epoch % conf['save_per_epoch'] == 0 and conf['rank'] == 0:
+
                 torchvision.utils.save_image(images.data.cpu() + 0.5, store_path_fmt.format(epoch, 'image'))
                 torchvision.utils.save_image(labels.data.cpu(), store_path_fmt.format(epoch, 'GT'))
                 torchvision.utils.save_image(seg_prob.data.cpu(), store_path_fmt.format(epoch, 'SR'))
                 torchvision.utils.save_image((seg_prob > 0.5).float().data.cpu(), store_path_fmt.format(epoch, 'PRE'))
 
+                check_dir(result_single_image_dir)
                 for i in range(seg_prob.shape[0]):
                     store_path = os.path.join(result_single_image_dir, '{}.png'.format(i))
                     torchvision.utils.save_image((seg_prob > 0.5).float()[i].data.cpu(), store_path)
@@ -109,6 +109,19 @@ def test(model, test_loader, conf, logger, epoch):
     random_recall_avg /= length
     false_split_avg /= length
     false_merge_avg /= length
+
+    if random_error_avg < best_random_error and conf['rank'] == 0:
+        torchvision.utils.save_image(images.data.cpu() + 0.5, store_path_fmt.format('Best', 'image'))
+        torchvision.utils.save_image(labels.data.cpu(), store_path_fmt.format('Best', 'GT'))
+        torchvision.utils.save_image(seg_prob.data.cpu(), store_path_fmt.format('Best', 'SR'))
+        torchvision.utils.save_image((seg_prob > 0.5).float().data.cpu(), store_path_fmt.format('Best', 'PRE'))
+        result_single_image_dir = os.path.join(conf['exp_dir'], 'result_single', 'Best'.format(epoch))
+        check_dir(result_single_image_dir)
+        for i in range(seg_prob.shape[0]):
+            store_path = os.path.join(result_single_image_dir, '{}.png'.format(i))
+            torchvision.utils.save_image((seg_prob > 0.5).float()[i].data.cpu(), store_path)
+            store_path = os.path.join(result_single_image_dir, '{}-prob.png'.format(i))
+            torchvision.utils.save_image(seg_prob[i].data.cpu(), store_path)
 
     # if conf['rank'] == 0:
     #     logger.info("[Test] Rank: {} Epoch: [{}/{}] Acc: {:.3f}".format(conf['rank'],
@@ -202,7 +215,7 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
                                                               random_recall_avg, false_split_avg, false_merge_avg
                                                               ))
 
-        test_acc, test_random_error = test(model, test_loader, conf, logger, epoch)
+        test_acc, test_random_error = test(model, test_loader, conf, logger, epoch, best_random_error)
 
         if best_random_error > test_random_error and conf['rank'] == 0:
             best_random_error = test_random_error
