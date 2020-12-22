@@ -281,6 +281,9 @@ def train(model, train_loader, test_loader, dev_loader, optimizer, conf, logger)
             state_dict = {'model': model.module.state_dict()}
             save_checkpoint(state_dict, conf['checkpoint_format'].format(save_name))
 
+    if conf['rank'] == 0:
+        tb_writer.close()
+
 
 def main(config, rank, world_size, gpu_id, port, kwargs):
     torch.backends.cudnn.benchmark = True
