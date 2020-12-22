@@ -6,16 +6,18 @@ from torchvision import transforms as T
 from torchvision.transforms import functional as F
 from PIL import Image
 import glob
+import torch
 
 
 class ImageFolder(data.Dataset):
     def __init__(self, root, mode='train', augmentation_prob=0.4, crop_size_min=300,
-                 crop_size_max=500, data_num=0):
+                 crop_size_max=500, data_num=0, gauss_size=21):
         """Initializes image paths and preprocessing module."""
         self.root = root
         self.crop_size_min = crop_size_min
         self.crop_size_max = crop_size_max
         self.data_num = data_num
+        self.gauss_size = gauss_size
 
         self.data_dir_name = mode + '_img'
         self.label_dir_name = mode + '_label'
@@ -77,7 +79,13 @@ class ImageFolder(data.Dataset):
         Norm_ = T.Normalize((0.5,), (0.5,))
         image = Norm_(image)
 
-        return image, GT
+        loss_weight = torch.ones_like(GT)
+        if self.gauss_size > 0:
+            gauss_trans = T.GaussianBlur(kernel_size=self.gauss_size, sigma=(5.0, 5.0))
+            weight_tmp = 1.0 - gauss_trans(GT)
+            loss_weight = 0.5*loss_weight + 0.5*weight_tmp
+
+        return image, GT, loss_weight
 
     def __len__(self):
         """Returns the total number of font files."""
@@ -100,15 +108,22 @@ def get_loader(image_path, image_size, batch_size, num_workers=2, mode='train', 
 
 if __name__ == '__main__':
     root = '/Users/chenzhengyang/gitRepo/Image_Segmentation/data'
-    dataset = ImageFolder(root, mode='train', augmentation_prob=0.4)
+    dataset = ImageFolder(root, mode='train', augmentation_prob=1.0, gauss_size=21)
 
     data_loader = data.DataLoader(dataset=dataset,
                                   batch_size=5,
                                   shuffle=False,
-                                  num_workers=1)
+                                  num_workers=1,
+                                )
+    data, label, loss_weight = dataset[0]
+    trans = T.ToPILImage()
+    image = trans(loss_weight)
+
+    image.show()
+
 
     import torchvision
-    for data, label in data_loader:
-        print(label.shape)
+    # for data, label, loss_weight in data_loader:
+    #     print(label.shape)
         # torchvision.utils.save_image(label.float()[0], 'tmp/tmp.png')
         # break

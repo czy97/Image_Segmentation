@@ -47,7 +47,7 @@ def test(model, test_loader, conf, logger, epoch):
 
 
     with torch.no_grad():
-        for iter_idx, (images, labels) in enumerate(test_loader):
+        for iter_idx, (images, labels, _) in enumerate(test_loader):
             images = images.to(conf['device'])
             labels = labels.to(conf['device'])
             seg_res = model(images)
@@ -119,7 +119,7 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
 
         if conf['rank'] == 0:
             t_bar = tqdm(ncols=100, total=len(train_loader), desc='Epoch:{}'.format(epoch))
-        for iter_idx, (images, labels) in enumerate(train_loader):
+        for iter_idx, (images, labels, loss_weight) in enumerate(train_loader):
             if conf['rank'] == 0:
                 t_bar.update()
 
@@ -133,7 +133,7 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
             seg_res_flat = seg_res.view(seg_res.size(0), -1)
             labels_flat = labels.view(labels.size(0), -1)
 
-            loss = F.binary_cross_entropy_with_logits(seg_res_flat, labels_flat)
+            loss = F.binary_cross_entropy_with_logits(seg_res_flat, labels_flat, loss_weight)
             epoch_loss += loss.item()
             loss.backward()
             optimizer.step()
@@ -229,7 +229,7 @@ def main(config, rank, world_size, gpu_id, port, kwargs):
 
     train_set = ImageFolder(root=conf['root'], mode='train', augmentation_prob=conf['aug_prob'],
                             crop_size_min=conf['crop_size_min'], crop_size_max=conf['crop_size_max'],
-                            data_num=conf['data_num'])
+                            data_num=conf['data_num'], gauss_size=conf['gauss_size'])
     train_loader = DataLoader(dataset=train_set, batch_size=conf['batch_size'],
                               shuffle=conf['shuffle'], num_workers=conf['num_workers'])
 
