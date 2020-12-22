@@ -103,7 +103,7 @@ def test(model, test_loader, conf, logger, epoch, best_random_error):
                     torchvision.utils.save_image(seg_prob[i].data.cpu(), store_path)
 
 
-    # acc = acc / length
+    acc = acc / length
     # random_error_avg /= length
     # random_precision_avg /= length
     # random_recall_avg /= length
