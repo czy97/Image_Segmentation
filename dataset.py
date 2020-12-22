@@ -12,13 +12,14 @@ from torchio import RandomElasticDeformation
 
 class ImageFolder(data.Dataset):
     def __init__(self, root, mode='train', augmentation_prob=0.4, crop_size_min=300,
-                 crop_size_max=500, data_num=0, gauss_size=21):
+                 crop_size_max=500, data_num=0, gauss_size=21, data_aug_list=[1, 1, 1, 1, 1]):
         """Initializes image paths and preprocessing module."""
         self.root = root
         self.crop_size_min = crop_size_min
         self.crop_size_max = crop_size_max
         self.data_num = data_num
         self.gauss_size = gauss_size
+        self.data_aug_list = data_aug_list
 
         self.data_dir_name = mode + '_img'
         self.label_dir_name = mode + '_label'
@@ -42,7 +43,7 @@ class ImageFolder(data.Dataset):
 
         if (self.mode == 'train') and p_transform <= self.augmentation_prob:
 
-            if random.random() < 0.5:  # random rotation
+            if random.random() < 0.5 and self.data_aug_list[0] == 1:  # random rotation
                 RotationDegree = random.randint(0, 3)
                 RotationDegree = self.RotationDegree[RotationDegree]
 
@@ -55,21 +56,21 @@ class ImageFolder(data.Dataset):
                 image = Transform(image)
                 GT = Transform(GT)
 
-            if random.random() < 0.5:  # random crop
+            if random.random() < 0.5 and self.data_aug_list[1] == 1:  # random crop
                 crop_len = random.randint(self.crop_size_min, self.crop_size_max)
                 i, j, h, w = T.RandomCrop.get_params(image, output_size=(crop_len, crop_len))
                 image = F.crop(image, i, j, h, w)
                 GT = F.crop(GT, i, j, h, w)
 
-            if random.random() < 0.5:
+            if random.random() < 0.5 and self.data_aug_list[2] == 1:
                 image = F.hflip(image)
                 GT = F.hflip(GT)
 
-            if random.random() < 0.5:
+            if random.random() < 0.5 and self.data_aug_list[3] == 1:
                 image = F.vflip(image)
                 GT = F.vflip(GT)
 
-            if random.random() < 0.5:
+            if random.random() < 0.5 and self.data_aug_list[4] == 1:
                 image, GT = elastic_deformation(image, GT)
 
 

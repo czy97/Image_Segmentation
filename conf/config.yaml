@@ -16,6 +16,7 @@ data_num: 640
 shuffle: True
 batch_size: 32  # U_Net:32 R2U_Net:12 AttU_Net:20 R2AttU_Net: 10
 num_workers: 4
+aug_list: [1, 1, 1, 1, 1]
 
 # optimization config
 seed: 666
