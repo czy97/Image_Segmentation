@@ -115,15 +115,15 @@ if __name__ == '__main__':
                                   shuffle=False,
                                   num_workers=1,
                                 )
-    data, label, loss_weight = dataset[0]
-    trans = T.ToPILImage()
-    image = trans(loss_weight)
-
-    image.show()
+    # data, label, loss_weight = dataset[0]
+    # trans = T.ToPILImage()
+    # image = trans(loss_weight)
+    #
+    # image.show()
 
 
     import torchvision
-    # for data, label, loss_weight in data_loader:
-    #     print(label.shape)
+    for data, label, loss_weight in data_loader:
+        print(label.shape)
         # torchvision.utils.save_image(label.float()[0], 'tmp/tmp.png')
-        # break
+        break

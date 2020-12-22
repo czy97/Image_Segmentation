@@ -3,6 +3,7 @@ import os
 from tqdm import tqdm
 import torch
 from torch import optim
+import numpy as np
 import torchvision
 import torch.distributed as dist
 from torch.utils.data import DataLoader
@@ -16,21 +17,49 @@ from torch.multiprocessing import Process
 from torch.nn.parallel import DistributedDataParallel as DDP
 from network import U_Net, R2U_Net, AttU_Net, R2AttU_Net
 from evaluation import *
+from skimage.metrics import adapted_rand_error, variation_of_information
 
 
 def save_checkpoint(state_dict, save_path):
     torch.save(state_dict, save_path)
 
 
+def get_metric_val(label_tensor, predict_tensor, thres=0.5):
+    '''
+    label_tensor: batchsize x 1 x 512 x 512
+    predict_tensor: batchsize x 1 x 512 x 512
+    '''
+    label_array = np.squeeze(label_tensor.data.cpu().numpy(), 1).astype(np.int)
+    predict_array = np.squeeze(predict_tensor.data.cpu().numpy(), 1)
+    predict_array = (predict_array > thres).astype(np.int)
+
+    random_error_error = 0.0
+    random_error_precision = 0.0
+    random_error_recall = 0.0
+
+    false_split = 0.0
+    false_merge = 0.0
+
+    for i in range(label_array.shape[0]):
+        error, precision, recall = adapted_rand_error(label_array[i], predict_array[i])
+        splits, merges = variation_of_information(label_array[i], predict_array[i])
+        random_error_error += error
+        random_error_precision += precision
+        random_error_recall += recall
+        false_split += splits
+        false_merge += merges
+
+    return random_error_error, random_error_precision, random_error_recall, false_split, false_merge
+
+
 def test(model, test_loader, conf, logger, epoch):
     model.eval()
     acc = 0.  # Accuracy
-    SE = 0.  # Sensitivity (Recall)
-    SP = 0.  # Specificity
-    PC = 0.  # Precision
-    F1 = 0.  # F1 Score
-    JS = 0.  # Jaccard Similarity
-    DC = 0.  # Dice Coefficient
+    random_error_avg = 0.0
+    random_precision_avg = 0.0
+    random_recall_avg = 0.0
+    false_split_avg = 0.0
+    false_merge_avg = 0.0
     length = 0
 
     # here we store the 5 test images in the same big image
@@ -54,12 +83,12 @@ def test(model, test_loader, conf, logger, epoch):
             seg_prob = torch.sigmoid(seg_res)
 
             acc += get_accuracy(seg_prob, labels)
-            SE += get_sensitivity(seg_prob, labels)
-            SP += get_specificity(seg_prob, labels)
-            PC += get_precision(seg_prob, labels)
-            F1 += get_F1(seg_prob, labels)
-            JS += get_JS(seg_prob, labels)
-            DC += get_DC(seg_prob, labels)
+            random_error, random_precision, random_recall, false_split, false_merge = get_metric_val(labels, seg_prob)
+            random_error_avg += random_error
+            random_precision_avg += random_precision
+            random_recall_avg += random_recall
+            false_split_avg += false_split
+            false_merge_avg += false_merge
             length += images.size(0)
 
             if epoch % conf['save_per_epoch'] == 0 and conf['rank'] == 0:
@@ -76,25 +105,25 @@ def test(model, test_loader, conf, logger, epoch):
 
 
     acc = acc / length
-    SE = SE / length
-    SP = SP / length
-    PC = PC / length
-    F1 = F1 / length
-    JS = JS / length
-    DC = DC / length
-    unet_score = JS + DC
+    random_error_avg /= length
+    random_precision_avg /= length
+    random_recall_avg /= length
+    false_split_avg /= length
+    false_merge_avg /= length
 
     # if conf['rank'] == 0:
-    #     logger.info("[Test] Epoch: [{}/{}] Acc: {:.3f} SE: {:.3f}  SP: {:.3f} PC: {:.3f} F1: {:.3f} JS: {:.3f} "
-    #                 "DC: {:.3f} Unet_score: {:.3f}".format(epoch, conf['num_epochs'],
-    #                                                        acc, SE, SP, PC, F1, JS, DC,
-    #                                                        unet_score))
+    #     logger.info("[Test] Rank: {} Epoch: [{}/{}] Acc: {:.3f}".format(conf['rank'],
+    #                                                         epoch, conf['num_epochs'],
+    #                                                         acc))
     if conf['rank'] == 0:
-        logger.info("[Test] Rank: {} Epoch: [{}/{}] Acc: {:.3f}".format(conf['rank'],
-                                                            epoch, conf['num_epochs'],
-                                                            acc))
+        logger.info("[Test] Rank: {} Epoch: [{}/{}] Acc: {:.3f} R_error: {:.2f} R_pre: {:.2f} R_recall: {:.2f}"
+                    " F_split: {:.2f} F_merge: {:.2f}".format(conf['rank'], epoch, conf['num_epochs'],
+                                                              acc, random_error_avg, random_precision_avg,
+                                                              random_recall_avg, false_split_avg, false_merge_avg
+                                                              ))
 
-    return acc, unet_score
+
+    return acc, random_error_avg
 
 
 def train(model, train_loader, test_loader, optimizer, conf, logger):
@@ -102,16 +131,15 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
                                                 eta_min=1e-6)
 
     model.train()
-    best_unet_score = 0.
+    best_random_error = 100.0
 
     for epoch in range(conf['num_epochs']):
         acc = 0.  # Accuracy
-        SE = 0.  # Sensitivity (Recall)
-        SP = 0.  # Specificity
-        PC = 0.  # Precision
-        F1 = 0.  # F1 Score
-        JS = 0.  # Jaccard Similarity
-        DC = 0.  # Dice Coefficient
+        random_error_avg = 0.0
+        random_precision_avg = 0.0
+        random_recall_avg = 0.0
+        false_split_avg = 0.0
+        false_merge_avg = 0.0
         length = 0
         epoch_loss = 0.0
 
@@ -142,36 +170,46 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
             scheduler.step()
 
             acc += get_accuracy(seg_prob, labels)
-            SE += get_sensitivity(seg_prob, labels)
-            SP += get_specificity(seg_prob, labels)
-            PC += get_precision(seg_prob, labels)
-            F1 += get_F1(seg_prob, labels)
-            JS += get_JS(seg_prob, labels)
-            DC += get_DC(seg_prob, labels)
+            random_error, random_precision, random_recall, false_split, false_merge = get_metric_val(labels, seg_prob)
+            random_error_avg += random_error
+            random_precision_avg += random_precision
+            random_recall_avg += random_recall
+            false_split_avg += false_split
+            false_merge_avg += false_merge
             length += images.size(0)
 
         if conf['rank'] == 0:
             t_bar.close()
 
         acc = acc / length
-        SE = SE / length
-        SP = SP / length
-        PC = PC / length
-        F1 = F1 / length
-        JS = JS / length
-        DC = DC / length
+        random_error_avg /= length
+        random_precision_avg /= length
+        random_recall_avg /= length
+        false_split_avg /= length
+        false_merge_avg /= length
         epoch_loss /= len(train_loader)
         current_lr = optimizer.param_groups[0]['lr']
 
-        # logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} SE: {:.3f}  SP: {:.3f} PC: {:.3f} F1: {:.3f} "
-        #             "JS: {:.3f} DC: {:.3f} Loss: {:.3f}".format(conf['rank'], epoch, conf['num_epochs'],
-        #                                                         acc, SE, SP, PC, F1, JS, DC,
-        #                                                         epoch_loss))
-        logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} Loss: {:.3f} Lr:{:.3e}".format(conf['rank'],
-                                                        epoch, conf['num_epochs'],
-                                                        acc, epoch_loss, current_lr))
 
-        test_acc, unet_score = test(model, test_loader, conf, logger, epoch)
+        # logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} Loss: {:.3f} Lr:{:.3e}".format(conf['rank'],
+        #                                                 epoch, conf['num_epochs'],
+        #                                                 acc, epoch_loss, current_lr))
+
+        logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} Loss: {:.3f} Lr:{:.3e} "
+                    "R_error: {:.2f} R_pre: {:.2f} R_recall: {:.2f}"
+                    " F_split: {:.2f} F_merge: {:.2f}".format(conf['rank'], epoch, conf['num_epochs'],
+                                                              acc, epoch_loss, current_lr,
+                                                              random_error_avg, random_precision_avg,
+                                                              random_recall_avg, false_split_avg, false_merge_avg
+                                                              ))
+
+        test_acc, test_random_error = test(model, test_loader, conf, logger, epoch)
+
+        if best_random_error > test_random_error:
+            best_random_error = test_random_error
+            save_name = 'Best'
+            state_dict = {'model': model.module.state_dict()}
+            save_checkpoint(state_dict, conf['checkpoint_format'].format(save_name))
 
         if epoch % conf['save_per_epoch'] == 0 and conf['rank'] == 0:
             save_name = 'Epoch-{}'.format(epoch)
