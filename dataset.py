@@ -141,11 +141,11 @@ if __name__ == '__main__':
                                   shuffle=False,
                                   num_workers=1,
                                 )
-    # data, label, loss_weight = dataset[0]
-    # trans = T.ToPILImage()
-    # image = trans(loss_weight)
-    #
-    # image.show()
+    data, label, loss_weight = dataset[0]
+    trans = T.ToPILImage()
+    image = trans(loss_weight)
+
+    image.show()
 
 
     import torchvision
