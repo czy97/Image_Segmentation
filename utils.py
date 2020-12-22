@@ -113,7 +113,6 @@ def set_seed(seed=66):
     # torch.backends.cudnn.benchmark = False
 
 
-
 def validate_path(dir_name):
     """
     :param dir_name: Create the directory if it doesn't exist

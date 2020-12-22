@@ -21,7 +21,7 @@ from skimage.metrics import adapted_rand_error, variation_of_information
 
 
 def save_checkpoint(state_dict, save_path):
-    torch.save(state_dict, save_path)
+    torch.save(state_dict, save_path, _use_new_zipfile_serialization=False)
 
 
 def get_metric_val(label_tensor, predict_tensor, thres=0.5):
@@ -73,7 +73,6 @@ def test(model, test_loader, conf, logger, epoch):
     if conf['rank'] == 0:
         check_dir(result_single_image_dir)
     dist.barrier()
-
 
     with torch.no_grad():
         for iter_idx, (images, labels, _) in enumerate(test_loader):
