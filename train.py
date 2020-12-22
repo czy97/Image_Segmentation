@@ -204,7 +204,7 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
 
         test_acc, test_random_error = test(model, test_loader, conf, logger, epoch)
 
-        if best_random_error > test_random_error:
+        if best_random_error > test_random_error and conf['rank'] == 0:
             best_random_error = test_random_error
             save_name = 'Best'
             state_dict = {'model': model.module.state_dict()}

@@ -12,7 +12,7 @@ root: 'data'
 aug_prob: 0.8
 crop_size_min: 300
 crop_size_max: 500
-data_num: 6400
+data_num: 640
 shuffle: True
 batch_size: 32  # U_Net:32 R2U_Net:12 AttU_Net:20 R2AttU_Net: 10
 num_workers: 4
@@ -20,8 +20,8 @@ num_workers: 4
 # optimization config
 seed: 666
 lr: 0.01
-num_epochs: 20
-save_per_epoch: 1
+num_epochs: 200
+save_per_epoch: 10
 weight_decay: 0.0001
 gauss_size: 21 # for gauss blur
 
