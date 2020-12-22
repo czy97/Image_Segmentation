@@ -125,6 +125,7 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
 
             images = images.to(conf['device'])
             labels = labels.to(conf['device'])
+            loss_weight = loss_weight.to(conf['device'])
 
             optimizer.zero_grad()
             seg_res = model(images)
