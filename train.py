@@ -186,7 +186,9 @@ def train(model, train_loader, test_loader, dev_loader, optimizer, conf, logger)
     iter_per_epoch = len(train_loader)
 
     if conf['rank'] == 0:
-        tb_writer = SummaryWriter()
+        summary_dir = os.path.join(conf['exp_dir'], 'tensorX_log')
+        check_dir(summary_dir)
+        tb_writer = SummaryWriter(summary_dir)
 
     for epoch in range(conf['num_epochs']):
         acc_sum = 0.  # Accuracy
