@@ -15,6 +15,15 @@ def dist_init(host_addr, rank, local_rank, world_size, port=23456):
     # torch.cuda.set_device(local_rank)
     assert dist.is_initialized()
 
+def getoneNode():
+    nodelist = os.environ['SLURM_JOB_NODELIST']
+    nodelist = nodelist.strip().split(',')[0]
+    import re
+    text = re.split('[-\[\]]',nodelist)
+    if ('' in text):
+        text.remove('')
+    return text[0] + '-' + text[1] + '-' + text[2]
+
 
 # ------------------------------ Logger ------------------------------
 # log to console or a file

@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from utils import parse_config_or_kwargs, store_yaml
 
 from utils import check_dir, get_logger_2
-from utils import set_seed, dist_init
+from utils import set_seed, dist_init, getoneNode
 from dataset import ImageFolder
 from torch.multiprocessing import Process
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -184,11 +184,22 @@ def main(config, rank, world_size, gpu_id, port, kwargs):
 
     conf = parse_config_or_kwargs(config, **kwargs)
 
-    host_addr = 'localhost'
-    conf['rank'] = rank
-    conf['local_rank'] = gpu_id  # specify the local gpu id
-    conf['world_size'] = world_size
-    dist_init(host_addr, conf['rank'], conf['local_rank'], conf['world_size'], port)
+    # --------- multi machine train set up --------------
+    if conf['train_local'] == 1:
+        host_addr = 'localhost'
+        conf['rank'] = rank
+        conf['local_rank'] = gpu_id  # specify the local gpu id
+        conf['world_size'] = world_size
+        dist_init(host_addr, conf['rank'], conf['local_rank'], conf['world_size'], port)
+    else:
+        host_addr = getoneNode()
+        conf['rank'] = int(os.environ['SLURM_PROCID'])
+        conf['local_rank'] = int(os.environ['SLURM_LOCALID'])
+        conf['world_size'] = int(os.environ['SLURM_NTASKS'])
+        dist_init(host_addr, conf['rank'], conf['local_rank'],
+                  conf['world_size'], '2' + os.environ['SLURM_JOBID'][-4:])
+        gpu_id = conf['local_rank']
+    # --------- multi machine train set up --------------
 
     # setup logger
     if conf['rank'] == 0:

@@ -1,5 +1,7 @@
 # experiment configuration
 exp_dir: 'exp/test'
+# train local or train on hpc based on slurm
+train_local: 1
 
 # model configuration
 model_type: 'U_Net'  # from U_Net, R2U_Net, AttU_Net, R2AttU_Net
