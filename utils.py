@@ -5,7 +5,26 @@ import numpy as np
 import random
 import yaml
 import torch.distributed as dist
+from PIL import Image
+from scipy import ndimage as ndi
+from skimage.metrics import (adapted_rand_error,
+                              variation_of_information)
 
+def eval_metric(pred_path, label_path):
+    pred = Image.open(pred_path)
+    label = Image.open(label_path)
+    label = np.array(label)
+    pred = np.array(pred)[:, :, 0]
+    label[label == 255] = 1
+    pred[pred == 255] = 1
+
+    im_true = ndi.label(ndi.binary_fill_holes(label))[0]
+    im_pred = ndi.label(ndi.binary_fill_holes(pred))[0]
+
+    error, precision, recall = adapted_rand_error(im_true, im_pred)
+    splits, merges = variation_of_information(im_true, im_pred)
+
+    return (error, precision, recall), (splits, merges)
 
 def dist_init(host_addr, rank, local_rank, world_size, port=23456):
     host_addr_full = 'tcp://' + host_addr + ':' + str(port)
