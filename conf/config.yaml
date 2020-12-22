@@ -6,6 +6,7 @@ train_local: 1
 # model configuration
 model_type: 'U_Net'  # from U_Net, R2U_Net, AttU_Net, R2AttU_Net
 base_ch_num: 8
+t: 2
 
 # data config
 root: 'data'

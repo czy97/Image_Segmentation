@@ -9,7 +9,7 @@ import torchvision
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
-from utils import parse_config_or_kwargs, store_yaml
+from utils import parse_config_or_kwargs, store_yaml, eval_metric_array
 
 from utils import check_dir, get_logger_2
 from utils import set_seed, dist_init, getoneNode
@@ -18,7 +18,6 @@ from torch.multiprocessing import Process
 from torch.nn.parallel import DistributedDataParallel as DDP
 from network import U_Net, R2U_Net, AttU_Net, R2AttU_Net
 from evaluation import *
-from skimage.metrics import adapted_rand_error, variation_of_information
 
 
 def save_checkpoint(state_dict, save_path):
@@ -42,8 +41,7 @@ def get_metric_val(label_tensor, predict_tensor, thres=0.5):
     false_merge = 0.0
 
     for i in range(label_array.shape[0]):
-        error, precision, recall = adapted_rand_error(label_array[i], predict_array[i])
-        splits, merges = variation_of_information(label_array[i], predict_array[i])
+        error, precision, recall, splits, merges = eval_metric_array(predict_array[i], label_array[i])
         random_error_error += error
         random_error_precision += precision
         random_error_recall += recall
@@ -81,12 +79,12 @@ def test(model, test_loader, conf, logger, epoch, best_random_error):
             seg_prob = torch.sigmoid(seg_res)
 
             acc += get_accuracy(seg_prob, labels)
-            # random_error, random_precision, random_recall, false_split, false_merge = get_metric_val(labels, seg_prob)
-            # random_error_avg += random_error
-            # random_precision_avg += random_precision
-            # random_recall_avg += random_recall
-            # false_split_avg += false_split
-            # false_merge_avg += false_merge
+            random_error, random_precision, random_recall, false_split, false_merge = get_metric_val(labels, seg_prob)
+            random_error_avg += random_error
+            random_precision_avg += random_precision
+            random_recall_avg += random_recall
+            false_split_avg += false_split
+            false_merge_avg += false_merge
             length += images.size(0)
 
             if epoch % conf['save_per_epoch'] == 0 and conf['rank'] == 0:
@@ -105,35 +103,35 @@ def test(model, test_loader, conf, logger, epoch, best_random_error):
 
 
     acc = acc / length
-    # random_error_avg /= length
-    # random_precision_avg /= length
-    # random_recall_avg /= length
-    # false_split_avg /= length
-    # false_merge_avg /= length
+    random_error_avg /= length
+    random_precision_avg /= length
+    random_recall_avg /= length
+    false_split_avg /= length
+    false_merge_avg /= length
 
-    # if random_error_avg < best_random_error and conf['rank'] == 0:
-    #     torchvision.utils.save_image(images.data.cpu() + 0.5, store_path_fmt.format('Best', 'image'))
-    #     torchvision.utils.save_image(labels.data.cpu(), store_path_fmt.format('Best', 'GT'))
-    #     torchvision.utils.save_image(seg_prob.data.cpu(), store_path_fmt.format('Best', 'SR'))
-    #     torchvision.utils.save_image((seg_prob > 0.5).float().data.cpu(), store_path_fmt.format('Best', 'PRE'))
-    #     result_single_image_dir = os.path.join(conf['exp_dir'], 'result_single', 'Best'.format(epoch))
-    #     check_dir(result_single_image_dir)
-    #     for i in range(seg_prob.shape[0]):
-    #         store_path = os.path.join(result_single_image_dir, '{}.png'.format(i))
-    #         torchvision.utils.save_image((seg_prob > 0.5).float()[i].data.cpu(), store_path)
-    #         store_path = os.path.join(result_single_image_dir, '{}-prob.png'.format(i))
-    #         torchvision.utils.save_image(seg_prob[i].data.cpu(), store_path)
+    if random_error_avg < best_random_error and conf['rank'] == 0:
+        torchvision.utils.save_image(images.data.cpu() + 0.5, store_path_fmt.format('Best', 'image'))
+        torchvision.utils.save_image(labels.data.cpu(), store_path_fmt.format('Best', 'GT'))
+        torchvision.utils.save_image(seg_prob.data.cpu(), store_path_fmt.format('Best', 'SR'))
+        torchvision.utils.save_image((seg_prob > 0.5).float().data.cpu(), store_path_fmt.format('Best', 'PRE'))
+        result_single_image_dir = os.path.join(conf['exp_dir'], 'result_single', 'Best'.format(epoch))
+        check_dir(result_single_image_dir)
+        for i in range(seg_prob.shape[0]):
+            store_path = os.path.join(result_single_image_dir, '{}.png'.format(i))
+            torchvision.utils.save_image((seg_prob > 0.5).float()[i].data.cpu(), store_path)
+            store_path = os.path.join(result_single_image_dir, '{}-prob.png'.format(i))
+            torchvision.utils.save_image(seg_prob[i].data.cpu(), store_path)
 
-    if conf['rank'] == 0:
-        logger.info("[Test] Rank: {} Epoch: [{}/{}] Acc: {:.3f}".format(conf['rank'],
-                                                            epoch, conf['num_epochs'],
-                                                            acc))
     # if conf['rank'] == 0:
-    #     logger.info("[Test] Rank: {} Epoch: [{}/{}] Acc: {:.3f} R_error: {:.3f} R_pre: {:.3f} R_recall: {:.3f}"
-    #                 " F_split: {:.2f} F_merge: {:.2f}".format(conf['rank'], epoch, conf['num_epochs'],
-    #                                                           acc, random_error_avg, random_precision_avg,
-    #                                                           random_recall_avg, false_split_avg, false_merge_avg
-    #                                                           ))
+    #     logger.info("[Test] Rank: {} Epoch: [{}/{}] Acc: {:.3f}".format(conf['rank'],
+    #                                                         epoch, conf['num_epochs'],
+    #                                                         acc))
+    if conf['rank'] == 0:
+        logger.info("[Test] Rank: {} Epoch: [{}/{}] Acc: {:.3f} R_error: {:.3f} R_pre: {:.3f} R_recall: {:.3f}"
+                    " F_split: {:.2f} F_merge: {:.2f}".format(conf['rank'], epoch, conf['num_epochs'],
+                                                              acc, random_error_avg, random_precision_avg,
+                                                              random_recall_avg, false_split_avg, false_merge_avg
+                                                              ))
 
 
     return acc, random_error_avg
@@ -184,46 +182,46 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
             scheduler.step()
 
             acc += get_accuracy(seg_prob, labels)
-            # random_error, random_precision, random_recall, false_split, false_merge = get_metric_val(labels, seg_prob)
-            # random_error_avg += random_error
-            # random_precision_avg += random_precision
-            # random_recall_avg += random_recall
-            # false_split_avg += false_split
-            # false_merge_avg += false_merge
+            random_error, random_precision, random_recall, false_split, false_merge = get_metric_val(labels, seg_prob)
+            random_error_avg += random_error
+            random_precision_avg += random_precision
+            random_recall_avg += random_recall
+            false_split_avg += false_split
+            false_merge_avg += false_merge
             length += images.size(0)
 
         if conf['rank'] == 0:
             t_bar.close()
 
         acc = acc / length
-        # random_error_avg /= length
-        # random_precision_avg /= length
-        # random_recall_avg /= length
-        # false_split_avg /= length
-        # false_merge_avg /= length
+        random_error_avg /= length
+        random_precision_avg /= length
+        random_recall_avg /= length
+        false_split_avg /= length
+        false_merge_avg /= length
         epoch_loss /= len(train_loader)
         current_lr = optimizer.param_groups[0]['lr']
 
 
-        logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} Loss: {:.3f} Lr:{:.3e}".format(conf['rank'],
-                                                        epoch, conf['num_epochs'],
-                                                        acc, epoch_loss, current_lr))
+        # logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} Loss: {:.3f} Lr:{:.3e}".format(conf['rank'],
+        #                                                 epoch, conf['num_epochs'],
+        #                                                 acc, epoch_loss, current_lr))
 
-        # logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} Loss: {:.3f} Lr:{:.3e} "
-        #             "R_error: {:.3f} R_pre: {:.3f} R_recall: {:.3f}"
-        #             " F_split: {:.2f} F_merge: {:.2f}".format(conf['rank'], epoch, conf['num_epochs'],
-        #                                                       acc, epoch_loss, current_lr,
-        #                                                       random_error_avg, random_precision_avg,
-        #                                                       random_recall_avg, false_split_avg, false_merge_avg
-        #                                                       ))
+        logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} Loss: {:.3f} Lr:{:.3e} "
+                    "R_error: {:.3f} R_pre: {:.3f} R_recall: {:.3f}"
+                    " F_split: {:.2f} F_merge: {:.2f}".format(conf['rank'], epoch, conf['num_epochs'],
+                                                              acc, epoch_loss, current_lr,
+                                                              random_error_avg, random_precision_avg,
+                                                              random_recall_avg, false_split_avg, false_merge_avg
+                                                              ))
 
         test_acc, test_random_error = test(model, test_loader, conf, logger, epoch, best_random_error)
 
-        # if best_random_error > test_random_error and conf['rank'] == 0:
-        #     best_random_error = test_random_error
-        #     save_name = 'Best'
-        #     state_dict = {'model': model.module.state_dict()}
-        #     save_checkpoint(state_dict, conf['checkpoint_format'].format(save_name))
+        if best_random_error > test_random_error and conf['rank'] == 0:
+            best_random_error = test_random_error
+            save_name = 'Best'
+            state_dict = {'model': model.module.state_dict()}
+            save_checkpoint(state_dict, conf['checkpoint_format'].format(save_name))
 
         if epoch % conf['save_per_epoch'] == 0 and conf['rank'] == 0:
             save_name = 'Epoch-{}'.format(epoch)
@@ -281,7 +279,10 @@ def main(config, rank, world_size, gpu_id, port, kwargs):
 
     set_seed(666 + conf['rank'])
 
-    model = eval(conf['model_type'])(base_ch_num=conf['base_ch_num'])
+    if 'R' in conf['model_type']:
+        model = eval(conf['model_type'])(base_ch_num=conf['base_ch_num'], t=conf['t'])
+    else:
+        model = eval(conf['model_type'])(base_ch_num=conf['base_ch_num'])
     model = model.to(conf['device'])
     model = DDP(model, device_ids=[conf['local_rank']], output_device=conf['local_rank'])
     optimizer = optim.Adam(model.parameters(), lr=conf['lr'], betas=(0.5, 0.99))

@@ -26,6 +26,16 @@ def eval_metric(pred_path, label_path):
 
     return (error, precision, recall), (splits, merges)
 
+
+def eval_metric_array(pred, label):
+    im_true = ndi.label(ndi.binary_fill_holes(label))[0]
+    im_pred = ndi.label(ndi.binary_fill_holes(pred))[0]
+
+    error, precision, recall = adapted_rand_error(im_true, im_pred)
+    splits, merges = variation_of_information(im_true, im_pred)
+
+    return error, precision, recall, splits, merges
+
 def dist_init(host_addr, rank, local_rank, world_size, port=23456):
     host_addr_full = 'tcp://' + host_addr + ':' + str(port)
     dist.init_process_group("nccl", init_method=host_addr_full,
@@ -144,4 +154,6 @@ def validate_path(dir_name):
 
 if __name__ == '__main__':
 
-    pass
+    label_path = '/Users/chenzhengyang/gitRepo/Image_Segmentation/data/new_test_set/test_label/0.png'
+    predict_path = '/Users/chenzhengyang/Downloads/exp/U_Net_aug_8_gauss_0/result_single/epoch-190/0.png'
+    print(eval_metric(predict_path, label_path))
