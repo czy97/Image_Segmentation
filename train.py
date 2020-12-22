@@ -175,7 +175,8 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
             labels_flat = labels.view(labels.size(0), -1)
             loss_weight_flat = loss_weight.view(loss_weight.size(0), -1)
 
-            loss = F.binary_cross_entropy_with_logits(seg_res_flat, labels_flat, loss_weight_flat)
+            loss = F.binary_cross_entropy_with_logits(seg_res_flat, labels_flat, reduction='none')
+            loss = torch.mean(loss * loss_weight_flat)
             epoch_loss += loss.item()
             loss.backward()
             optimizer.step()
