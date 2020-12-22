@@ -7,6 +7,7 @@ from torchvision.transforms import functional as F
 from PIL import Image
 import glob
 import torch
+from torchio import RandomElasticDeformation
 
 
 class ImageFolder(data.Dataset):
@@ -40,6 +41,7 @@ class ImageFolder(data.Dataset):
         p_transform = random.random()
 
         if (self.mode == 'train') and p_transform <= self.augmentation_prob:
+
             if random.random() < 0.5:  # random rotation
                 RotationDegree = random.randint(0, 3)
                 RotationDegree = self.RotationDegree[RotationDegree]
@@ -66,6 +68,12 @@ class ImageFolder(data.Dataset):
             if random.random() < 0.5:
                 image = F.vflip(image)
                 GT = F.vflip(GT)
+
+            if random.random() < 0.5:
+                image, GT = elastic_deformation(image, GT)
+
+
+
 
             Transform = []
 
@@ -94,6 +102,23 @@ class ImageFolder(data.Dataset):
         else:
             return len(self.data_paths)
 
+
+def elastic_deformation(image, GT, num_control_points=7, max_displacement=50):
+    to_tensor = T.ToTensor()
+    to_image = T.ToPILImage()
+    transform = RandomElasticDeformation(
+        num_control_points=num_control_points,  # or just 7
+        max_displacement=max_displacement,
+        locked_borders=2)
+
+    image_tensor = to_tensor(image)[0].unsqueeze(0)
+    GT_tensor = to_tensor(GT)[0].unsqueeze(0)
+    concated_tensor = torch.cat((image_tensor, GT_tensor), dim=0)
+    elastic_tensor = transform(concated_tensor.unsqueeze(-1))
+    image_transformed = to_image(elastic_tensor[0].squeeze(-1))
+    GT_transformed = to_image(elastic_tensor[1].squeeze(-1))
+
+    return image_transformed, GT_transformed
 
 def get_loader(image_path, image_size, batch_size, num_workers=2, mode='train', augmentation_prob=0.4):
     """Builds and returns Dataloader."""
