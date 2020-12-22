@@ -11,7 +11,7 @@ from torchio import RandomElasticDeformation
 
 
 class ImageFolder(data.Dataset):
-    def __init__(self, root, mode='train', augmentation_prob=0.4, crop_size_min=300,
+    def __init__(self, root, mode='train', augmentation_prob=0.0, crop_size_min=300,
                  crop_size_max=500, data_num=0, gauss_size=21, data_aug_list=[1, 1, 1, 1, 1]):
         """Initializes image paths and preprocessing module."""
         self.root = root

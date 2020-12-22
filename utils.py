@@ -153,6 +153,7 @@ def validate_path(dir_name):
 
 
 if __name__ == '__main__':
+    image_list = ['0.png', '0.png', '0.png', '0.png', '0.png']
 
     label_path = '/Users/chenzhengyang/gitRepo/Image_Segmentation/data/new_test_set/test_label/0.png'
     predict_path = '/Users/chenzhengyang/Downloads/exp/U_Net_aug_8_gauss_0/result_single/epoch-190/0.png'

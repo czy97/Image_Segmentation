@@ -18,6 +18,7 @@ from torch.multiprocessing import Process
 from torch.nn.parallel import DistributedDataParallel as DDP
 from network import U_Net, R2U_Net, AttU_Net, R2AttU_Net
 from evaluation import *
+from tensorboardX import SummaryWriter
 
 
 def save_checkpoint(state_dict, save_path):
@@ -48,7 +49,47 @@ def get_metric_val(label_tensor, predict_tensor, thres=0.5):
         false_split += splits
         false_merge += merges
 
+    random_error_error /= label_array.shape[0]
+    random_error_precision /= label_array.shape[0]
+    random_error_recall /= label_array.shape[0]
+    false_split /= label_array.shape[0]
+    false_merge /= label_array.shape[0]
+
     return random_error_error, random_error_precision, random_error_recall, false_split, false_merge
+
+
+def dev_eval(model, dev_loader, conf):
+    model.eval()
+    acc = 0.  # Accuracy
+    random_error_avg = 0.0
+    random_precision_avg = 0.0
+    random_recall_avg = 0.0
+    false_split_avg = 0.0
+    false_merge_avg = 0.0
+
+    with torch.no_grad():
+        for iter_idx, (images, labels, _) in enumerate(dev_loader):
+            images = images.to(conf['device'])
+            labels = labels.to(conf['device'])
+            seg_res = model(images)
+            seg_prob = torch.sigmoid(seg_res)
+
+            acc += get_accuracy(seg_prob, labels)
+            random_error, random_precision, random_recall, false_split, false_merge = get_metric_val(labels, seg_prob)
+            random_error_avg += random_error
+            random_precision_avg += random_precision
+            random_recall_avg += random_recall
+            false_split_avg += false_split
+            false_merge_avg += false_merge
+
+    acc = acc / len(dev_loader)
+    random_error_avg /= len(dev_loader)
+    random_precision_avg /= len(dev_loader)
+    random_recall_avg /= len(dev_loader)
+    false_split_avg /= len(dev_loader)
+    false_merge_avg /= len(dev_loader)
+
+    return acc, random_error_avg, random_precision_avg, random_recall_avg, false_split_avg, false_merge_avg
 
 
 def test(model, test_loader, conf, logger, epoch, best_random_error):
@@ -102,12 +143,12 @@ def test(model, test_loader, conf, logger, epoch, best_random_error):
                     torchvision.utils.save_image(seg_prob[i].data.cpu(), store_path)
 
 
-    acc = acc / length
-    random_error_avg /= length
-    random_precision_avg /= length
-    random_recall_avg /= length
-    false_split_avg /= length
-    false_merge_avg /= length
+    acc = acc / len(test_loader)
+    random_error_avg /= len(test_loader)
+    random_precision_avg /= len(test_loader)
+    random_recall_avg /= len(test_loader)
+    false_split_avg /= len(test_loader)
+    false_merge_avg /= len(test_loader)
 
     if random_error_avg < best_random_error and conf['rank'] == 0:
         torchvision.utils.save_image(images.data.cpu() + 0.5, store_path_fmt.format('Best', 'image'))
@@ -133,31 +174,28 @@ def test(model, test_loader, conf, logger, epoch, best_random_error):
                                                               random_recall_avg, false_split_avg, false_merge_avg
                                                               ))
 
+    return acc, random_error_avg, random_precision_avg, random_recall_avg, false_split_avg, false_merge_avg
 
-    return acc, random_error_avg
 
-
-def train(model, train_loader, test_loader, optimizer, conf, logger):
+def train(model, train_loader, test_loader, dev_loader, optimizer, conf, logger):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=conf['num_epochs'] * len(train_loader),
                                                 eta_min=1e-6)
 
     model.train()
     best_random_error = 100.0
+    iter_per_epoch = len(train_loader)
+
+    if conf['rank'] == 0:
+        tb_writer = SummaryWriter()
 
     for epoch in range(conf['num_epochs']):
-        acc = 0.  # Accuracy
-        random_error_avg = 0.0
-        random_precision_avg = 0.0
-        random_recall_avg = 0.0
-        false_split_avg = 0.0
-        false_merge_avg = 0.0
-        length = 0
+        acc_sum = 0.  # Accuracy
         epoch_loss = 0.0
 
         model.train()
 
         if conf['rank'] == 0:
-            t_bar = tqdm(ncols=100, total=len(train_loader), desc='Epoch:{}'.format(epoch))
+            t_bar = tqdm(ncols=100, total=iter_per_epoch, desc='Epoch:{}'.format(epoch))
         for iter_idx, (images, labels, loss_weight) in enumerate(train_loader):
             if conf['rank'] == 0:
                 t_bar.update()
@@ -181,25 +219,20 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
             optimizer.step()
             scheduler.step()
 
-            acc += get_accuracy(seg_prob, labels)
-            random_error, random_precision, random_recall, false_split, false_merge = get_metric_val(labels, seg_prob)
-            random_error_avg += random_error
-            random_precision_avg += random_precision
-            random_recall_avg += random_recall
-            false_split_avg += false_split
-            false_merge_avg += false_merge
-            length += images.size(0)
+            acc = get_accuracy(seg_prob, labels)
+            acc_sum += acc
+
+            step_idx = epoch * iter_per_epoch + iter_idx
+            if conf['rank'] == 0:
+                tb_writer.add_scalar("acc_step", acc, step_idx)
+                tb_writer.add_scalar("loss_step", loss.item(), step_idx)
 
         if conf['rank'] == 0:
             t_bar.close()
 
-        acc = acc / length
-        random_error_avg /= length
-        random_precision_avg /= length
-        random_recall_avg /= length
-        false_split_avg /= length
-        false_merge_avg /= length
-        epoch_loss /= len(train_loader)
+        acc_sum = acc_sum / iter_per_epoch
+
+        epoch_loss /= iter_per_epoch
         current_lr = optimizer.param_groups[0]['lr']
 
 
@@ -207,18 +240,36 @@ def train(model, train_loader, test_loader, optimizer, conf, logger):
         #                                                 epoch, conf['num_epochs'],
         #                                                 acc, epoch_loss, current_lr))
 
+
+        test_acc, test_error, test_pre, test_recall, test_split, test_merge = test(model,
+                                           test_loader, conf, logger, epoch, best_random_error)
+        dev_acc, dev_error, dev_pre, dev_recall, dev_split, dev_merge = dev_eval(model, dev_loader, conf)
+
         logger.info("[Train] Rank: {} Epoch: [{}/{}] Acc: {:.3f} Loss: {:.3f} Lr:{:.3e} "
                     "R_error: {:.3f} R_pre: {:.3f} R_recall: {:.3f}"
                     " F_split: {:.2f} F_merge: {:.2f}".format(conf['rank'], epoch, conf['num_epochs'],
-                                                              acc, epoch_loss, current_lr,
-                                                              random_error_avg, random_precision_avg,
-                                                              random_recall_avg, false_split_avg, false_merge_avg
+                                                              acc_sum, epoch_loss, current_lr,
+                                                              dev_error, dev_pre,
+                                                              dev_recall, dev_split, dev_merge
                                                               ))
+        if conf['rank'] == 0:
+            tb_writer.add_scalar("test_acc", test_acc, epoch)
+            tb_writer.add_scalar("test_error", test_error, epoch)
+            tb_writer.add_scalar("test_pre", test_pre, epoch)
+            tb_writer.add_scalar("test_recall", test_recall, epoch)
+            tb_writer.add_scalar("test_split", test_split, epoch)
+            tb_writer.add_scalar("test_merge", test_merge, epoch)
 
-        test_acc, test_random_error = test(model, test_loader, conf, logger, epoch, best_random_error)
+            tb_writer.add_scalar("train_acc", dev_acc, epoch)
+            tb_writer.add_scalar("train_error", dev_error, epoch)
+            tb_writer.add_scalar("train_pre", dev_pre, epoch)
+            tb_writer.add_scalar("train_recall", dev_recall, epoch)
+            tb_writer.add_scalar("train_split", dev_split, epoch)
+            tb_writer.add_scalar("train_merge", dev_merge, epoch)
 
-        if best_random_error > test_random_error and conf['rank'] == 0:
-            best_random_error = test_random_error
+
+        if best_random_error > test_error and conf['rank'] == 0:
+            best_random_error = test_error
             save_name = 'Best'
             state_dict = {'model': model.module.state_dict()}
             save_checkpoint(state_dict, conf['checkpoint_format'].format(save_name))
@@ -300,12 +351,16 @@ def main(config, rank, world_size, gpu_id, port, kwargs):
     train_loader = DataLoader(dataset=train_set, batch_size=conf['batch_size'],
                               shuffle=conf['shuffle'], num_workers=conf['num_workers'])
 
+    dev_set = ImageFolder(root=conf['root'], mode='train', augmentation_prob=0.0)
+    dev_loader = DataLoader(dataset=dev_set, batch_size=5,
+                             shuffle=False, num_workers=1)
+
     test_set = ImageFolder(root=conf['root'], mode='test')
     test_loader = DataLoader(dataset=test_set, batch_size=5,
                              shuffle=False, num_workers=1)
 
     dist.barrier()  # synchronize here
-    train(model, train_loader, test_loader, optimizer, conf, logger)
+    train(model, train_loader, test_loader, dev_loader, optimizer, conf, logger)
 
 
 def spawn_process(config, gpu_id=None, port=23456, **kwargs):
