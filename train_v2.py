@@ -360,9 +360,14 @@ def main(config, rank, world_size, gpu_id, port, kwargs):
     dev_loader = DataLoader(dataset=dev_set, batch_size=5,
                              shuffle=False, num_workers=1)
 
+    valid_set = ImageFolder(root=conf['root'], mode='valid')
+    valid_loader = DataLoader(dataset=valid_set, batch_size=5,
+                             shuffle=False, num_workers=1)
+
     test_set = ImageFolder(root=conf['root'], mode='test')
     test_loader = DataLoader(dataset=test_set, batch_size=5,
                              shuffle=False, num_workers=1)
+
 
     dist.barrier()  # synchronize here
     train(model, train_loader, test_loader, dev_loader, optimizer, conf, logger)
