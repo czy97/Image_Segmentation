@@ -12,7 +12,8 @@ from torchio import RandomElasticDeformation
 
 class ImageFolder(data.Dataset):
     def __init__(self, root, mode='train', augmentation_prob=0.0, crop_size_min=300,
-                 crop_size_max=500, data_num=0, gauss_size=21, data_aug_list=[1, 1, 1, 1, 1]):
+                 crop_size_max=500, data_num=0, gauss_size=21, data_aug_list=[1, 1, 1, 1, 1],
+                 re_weight=False):
         """Initializes image paths and preprocessing module."""
         self.root = root
         self.crop_size_min = crop_size_min
@@ -20,6 +21,7 @@ class ImageFolder(data.Dataset):
         self.data_num = data_num
         self.gauss_size = gauss_size
         self.data_aug_list = data_aug_list
+        self.re_weight = re_weight
 
         self.data_dir_name = mode + '_img'
         self.label_dir_name = mode + '_label'
@@ -94,6 +96,17 @@ class ImageFolder(data.Dataset):
             weight_tmp = 1.0 - gauss_trans(GT)
             loss_weight = 0.5*loss_weight + 0.5*weight_tmp
 
+        if self.re_weight:
+            zero_loc_tensor = (GT < 0.5).float()
+            one_loc_tensor = (GT > 0.5).float()
+
+            one_ratio = torch.sum(GT) / (512 * 512)
+            one_loc_tensor = one_loc_tensor / one_ratio
+            zero_loc_tensor = zero_loc_tensor / (1.0 - one_ratio)
+
+            loss_weight = one_loc_tensor + zero_loc_tensor
+        loss_weight = loss_weight / torch.sum(loss_weight) * (512 * 512)
+
         return image, GT, loss_weight
 
     def __len__(self):
@@ -141,15 +154,15 @@ if __name__ == '__main__':
                                   shuffle=False,
                                   num_workers=1,
                                 )
-    data, label, loss_weight = dataset[0]
-    trans = T.ToPILImage()
-    image = trans(loss_weight)
-
-    image.show()
+    # data, label, loss_weight = dataset[0]
+    # trans = T.ToPILImage()
+    # image = trans(loss_weight)
+    #
+    # image.show()
 
 
     import torchvision
     for data, label, loss_weight in data_loader:
-        print(label.shape)
+        print(loss_weight.shape)
         # torchvision.utils.save_image(label.float()[0], 'tmp/tmp.png')
         break
