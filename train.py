@@ -16,7 +16,7 @@ from utils import set_seed, dist_init, getoneNode
 from dataset import ImageFolder
 from torch.multiprocessing import Process
 from torch.nn.parallel import DistributedDataParallel as DDP
-from network import U_Net, R2U_Net, AttU_Net, R2AttU_Net
+from network import U_Net, R2U_Net, AttU_Net, R2AttU_Net, Pipe_Net
 from evaluation import *
 from tensorboardX import SummaryWriter
 
